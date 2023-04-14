@@ -29,11 +29,11 @@ def lambda_handler(event, context):
 	To put, update, or delete an item, make a POST, PUT, or DELETE request respectively,
 	passing in the payload to the DynamoDB API as a JSON body.
     '''
-    print("Received event: " + json.dumps(event, indent=2))
+    print(f"Received event: {json.dumps(event, indent=2)}")
 
     operations = {
         'DELETE': lambda dynamo, x: dynamo.delete_item(TableName=table_name, **x),
-	'GET': lambda dynamo, x: dynamo.scan(TableName=table_name, **x) if x else dynamo.scan(TableName=table_name),
+    'GET': lambda dynamo, x: dynamo.scan(TableName=table_name, **x) if x else dynamo.scan(TableName=table_name),
         'POST': lambda dynamo, x: dynamo.put_item(TableName=table_name, **x),
         'PUT': lambda dynamo, x: dynamo.update_item(TableName=table_name, **x),
     }
@@ -43,4 +43,4 @@ def lambda_handler(event, context):
         payload = event['queryStringParameters'] if operation == 'GET' else json.loads(event['body'])
         return respond(None, operations[operation](dynamo, payload))
     else:
-        return respond(ValueError('Unsupported method "{}"'.format(operation)))
+        return respond(ValueError(f'Unsupported method "{operation}"'))

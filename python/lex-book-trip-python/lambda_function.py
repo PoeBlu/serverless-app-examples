@@ -46,16 +46,14 @@ def confirm_intent(session_attributes, intent_name, slots, message):
 
 
 def close(session_attributes, fulfillment_state, message):
-    response = {
+    return {
         'sessionAttributes': session_attributes,
         'dialogAction': {
             'type': 'Close',
             'fulfillmentState': fulfillment_state,
-            'message': message
-        }
+            'message': message,
+        },
     }
-
-    return response
 
 
 def delegate(session_attributes, slots):
@@ -75,9 +73,7 @@ def safe_int(n):
     """
     Safely convert n value to int.
     """
-    if n is not None:
-        return int(n)
-    return n
+    return int(n) if n is not None else n
 
 
 def try_ex(func):
@@ -101,10 +97,9 @@ def generate_car_price(location, days, age, car_type):
     """
 
     car_types = ['economy', 'standard', 'midsize', 'full size', 'minivan', 'luxury']
-    base_location_cost = 0
-    for i in range(len(location)):
-        base_location_cost += ord(location.lower()[i]) - 97
-
+    base_location_cost = sum(
+        ord(location.lower()[i]) - 97 for i in range(len(location))
+    )
     age_multiplier = 1.10 if age < 25 else 1
     # Select economy is car_type is not found
     if car_type not in car_types:
@@ -120,10 +115,9 @@ def generate_hotel_price(location, nights, room_type):
     """
 
     room_types = ['queen', 'king', 'deluxe']
-    cost_of_living = 0
-    for i in range(len(location)):
-        cost_of_living += ord(location.lower()[i]) - 97
-
+    cost_of_living = sum(
+        ord(location.lower()[i]) - 97 for i in range(len(location))
+    )
     return nights * (100 + cost_of_living + (100 + room_types.index(room_type.lower())))
 
 
@@ -184,19 +178,18 @@ def validate_book_car(slots):
         return build_validation_result(
             False,
             'PickUpCity',
-            'We currently do not support {} as a valid destination.  Can you try a different city?'.format(pickup_city)
+            f'We currently do not support {pickup_city} as a valid destination.  Can you try a different city?',
         )
 
     if pickup_date:
         if not isvalid_date(pickup_date):
             return build_validation_result(False, 'PickUpDate', 'I did not understand your departure date.  When would you like to pick up your car rental?')
 
-        if dateutil.parser.parse(pickup_date) < datetime.datetime.today():
+        if dateutil.parser.parse(pickup_date) < datetime.datetime.now():
             return build_validation_result(False, 'PickUpDate', 'Your pick up date is in the past!  Can you try a different date?')
 
-    if return_date:
-        if not isvalid_date(return_date):
-            return build_validation_result(False, 'ReturnDate', 'I did not understand your return date.  When would you like to return your car rental?')
+    if return_date and not isvalid_date(return_date):
+        return build_validation_result(False, 'ReturnDate', 'I did not understand your return date.  When would you like to return your car rental?')
 
     if pickup_date and return_date:
         if dateutil.parser.parse(pickup_date) >= dateutil.parser.parse(return_date):
@@ -232,14 +225,14 @@ def validate_hotel(slots):
         return build_validation_result(
             False,
             'Location',
-            'We currently do not support {} as a valid destination.  Can you try a different city?'.format(location)
+            f'We currently do not support {location} as a valid destination.  Can you try a different city?',
         )
 
     if checkin_date:
         if not isvalid_date(checkin_date):
             return build_validation_result(False, 'CheckInDate', 'I did not understand your check in date.  When would you like to check in?')
 
-        if dateutil.parser.parse(checkin_date) < datetime.datetime.today():
+        if dateutil.parser.parse(checkin_date) < datetime.datetime.now():
             return build_validation_result(False, 'CheckInDate', 'Your check in date is in the past!  Can you try a different date?')
 
     if nights is not None and (nights < 1 or nights > 30):
@@ -313,7 +306,7 @@ def book_hotel(intent_request):
         return delegate(session_attributes, intent_request['currentIntent']['slots'])
 
     # Booking the hotel.  In a real application, this would likely involve a call to a backend service.
-    logger.debug('bookHotel under={}'.format(reservation))
+    logger.debug(f'bookHotel under={reservation}')
 
     try_ex(lambda: session_attributes.pop('currentReservationPrice'))
     try_ex(lambda: session_attributes.pop('currentReservation'))
@@ -381,64 +374,6 @@ def book_car(intent_request):
 
         # Determine if the intent (and current slot settings) has been denied.  The messaging will be different
         # if the user is denying a reservation he initiated or an auto-populated suggestion.
-        if confirmation_status == 'Denied':
-            # Clear out auto-population flag for subsequent turns.
-            try_ex(lambda: session_attributes.pop('confirmationContext'))
-            try_ex(lambda: session_attributes.pop('currentReservation'))
-            if confirmation_context == 'AutoPopulate':
-                return elicit_slot(
-                    session_attributes,
-                    intent_request['currentIntent']['name'],
-                    {
-                        'PickUpCity': None,
-                        'PickUpDate': None,
-                        'ReturnDate': None,
-                        'DriverAge': None,
-                        'CarType': None
-                    },
-                    'PickUpCity',
-                    {
-                        'contentType': 'PlainText',
-                        'content': 'Where would you like to make your car reservation?'
-                    }
-                )
-
-            return delegate(session_attributes, intent_request['currentIntent']['slots'])
-
-        if confirmation_status == 'None':
-            # If we are currently auto-populating but have not gotten confirmation, keep requesting for confirmation.
-            if (not pickup_city and not pickup_date and not return_date and not driver_age and not car_type)\
-                    or confirmation_context == 'AutoPopulate':
-                if last_confirmed_reservation and try_ex(lambda: last_confirmed_reservation['ReservationType']) == 'Hotel':
-                    # If the user's previous reservation was a hotel - prompt for a rental with
-                    # auto-populated values to match this reservation.
-                    session_attributes['confirmationContext'] = 'AutoPopulate'
-                    return confirm_intent(
-                        session_attributes,
-                        intent_request['currentIntent']['name'],
-                        {
-                            'PickUpCity': last_confirmed_reservation['Location'],
-                            'PickUpDate': last_confirmed_reservation['CheckInDate'],
-                            'ReturnDate': add_days(
-                                last_confirmed_reservation['CheckInDate'], last_confirmed_reservation['Nights']
-                            ),
-                            'CarType': None,
-                            'DriverAge': None
-                        },
-                        {
-                            'contentType': 'PlainText',
-                            'content': 'Is this car rental for your {} night stay in {} on {}?'.format(
-                                last_confirmed_reservation['Nights'],
-                                last_confirmed_reservation['Location'],
-                                last_confirmed_reservation['CheckInDate']
-                            )
-                        }
-                    )
-
-            # Otherwise, let native DM rules determine how to elicit for slots and/or drive confirmation.
-            return delegate(session_attributes, intent_request['currentIntent']['slots'])
-
-        # If confirmation has occurred, continue filling any unfilled slot values or pass to fulfillment.
         if confirmation_status == 'Confirmed':
             # Remove confirmationContext from sessionAttributes so it does not confuse future requests
             try_ex(lambda: session_attributes.pop('confirmationContext'))
@@ -469,8 +404,81 @@ def book_car(intent_request):
 
             return delegate(session_attributes, intent_request['currentIntent']['slots'])
 
+        elif confirmation_status == 'Denied':
+            # Clear out auto-population flag for subsequent turns.
+            try_ex(lambda: session_attributes.pop('confirmationContext'))
+            try_ex(lambda: session_attributes.pop('currentReservation'))
+            return (
+                elicit_slot(
+                    session_attributes,
+                    intent_request['currentIntent']['name'],
+                    {
+                        'PickUpCity': None,
+                        'PickUpDate': None,
+                        'ReturnDate': None,
+                        'DriverAge': None,
+                        'CarType': None,
+                    },
+                    'PickUpCity',
+                    {
+                        'contentType': 'PlainText',
+                        'content': 'Where would you like to make your car reservation?',
+                    },
+                )
+                if confirmation_context == 'AutoPopulate'
+                else delegate(
+                    session_attributes,
+                    intent_request['currentIntent']['slots'],
+                )
+            )
+        elif confirmation_status == 'None':
+            # If we are currently auto-populating but have not gotten confirmation, keep requesting for confirmation.
+            if (
+                (
+                    (
+                        not pickup_city
+                        and not pickup_date
+                        and not return_date
+                        and not driver_age
+                        and not car_type
+                    )
+                    or confirmation_context == 'AutoPopulate'
+                )
+                and last_confirmed_reservation
+                and try_ex(
+                    lambda: last_confirmed_reservation['ReservationType']
+                )
+                == 'Hotel'
+            ):
+                # If the user's previous reservation was a hotel - prompt for a rental with
+                # auto-populated values to match this reservation.
+                session_attributes['confirmationContext'] = 'AutoPopulate'
+                return confirm_intent(
+                    session_attributes,
+                    intent_request['currentIntent']['name'],
+                    {
+                        'PickUpCity': last_confirmed_reservation['Location'],
+                        'PickUpDate': last_confirmed_reservation[
+                            'CheckInDate'
+                        ],
+                        'ReturnDate': add_days(
+                            last_confirmed_reservation['CheckInDate'],
+                            last_confirmed_reservation['Nights'],
+                        ),
+                        'CarType': None,
+                        'DriverAge': None,
+                    },
+                    {
+                        'contentType': 'PlainText',
+                        'content': f"Is this car rental for your {last_confirmed_reservation['Nights']} night stay in {last_confirmed_reservation['Location']} on {last_confirmed_reservation['CheckInDate']}?",
+                    },
+                )
+
+            # Otherwise, let native DM rules determine how to elicit for slots and/or drive confirmation.
+            return delegate(session_attributes, intent_request['currentIntent']['slots'])
+
     # Booking the car.  In a real application, this would likely involve a call to a backend service.
-    logger.debug('bookCar at={}'.format(reservation))
+    logger.debug(f'bookCar at={reservation}')
     del session_attributes['currentReservationPrice']
     del session_attributes['currentReservation']
     session_attributes['lastConfirmedReservation'] = reservation
@@ -492,17 +500,19 @@ def dispatch(intent_request):
     Called when the user specifies an intent for this bot.
     """
 
-    logger.debug('dispatch userId={}, intentName={}'.format(intent_request['userId'], intent_request['currentIntent']['name']))
+    logger.debug(
+        f"dispatch userId={intent_request['userId']}, intentName={intent_request['currentIntent']['name']}"
+    )
 
     intent_name = intent_request['currentIntent']['name']
 
     # Dispatch to your bot's intent handlers
-    if intent_name == 'BookHotel':
-        return book_hotel(intent_request)
-    elif intent_name == 'BookCar':
+    if intent_name == 'BookCar':
         return book_car(intent_request)
 
-    raise Exception('Intent with name ' + intent_name + ' not supported')
+    elif intent_name == 'BookHotel':
+        return book_hotel(intent_request)
+    raise Exception(f'Intent with name {intent_name} not supported')
 
 
 # --- Main handler ---
@@ -514,6 +524,6 @@ def lambda_handler(event, context):
     The JSON body of the request is provided in the event slot.
     """
 
-    logger.debug('event.bot.name={}'.format(event['bot']['name']))
+    logger.debug(f"event.bot.name={event['bot']['name']}")
 
     return dispatch(event)

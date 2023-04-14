@@ -14,22 +14,16 @@ from __future__ import print_function
 
 def build_speechlet_response(title, output, reprompt_text, should_end_session):
     return {
-        'outputSpeech': {
-            'type': 'PlainText',
-            'text': output
-        },
+        'outputSpeech': {'type': 'PlainText', 'text': output},
         'card': {
             'type': 'Simple',
-            'title': "SessionSpeechlet - " + title,
-            'content': "SessionSpeechlet - " + output
+            'title': f"SessionSpeechlet - {title}",
+            'content': f"SessionSpeechlet - {output}",
         },
         'reprompt': {
-            'outputSpeech': {
-                'type': 'PlainText',
-                'text': reprompt_text
-            }
+            'outputSpeech': {'type': 'PlainText', 'text': reprompt_text}
         },
-        'shouldEndSession': should_end_session
+        'shouldEndSession': should_end_session,
     }
 
 
@@ -81,17 +75,13 @@ def set_color_in_session(intent, session):
     user.
     """
 
-    card_title = intent['name']
     session_attributes = {}
     should_end_session = False
 
     if 'Color' in intent['slots']:
         favorite_color = intent['slots']['Color']['value']
         session_attributes = create_favorite_color_attributes(favorite_color)
-        speech_output = "I now know your favorite color is " + \
-                        favorite_color + \
-                        ". You can ask me your favorite color by saying, " \
-                        "what's my favorite color?"
+        speech_output = f"I now know your favorite color is {favorite_color}. You can ask me your favorite color by saying, what's my favorite color?"
         reprompt_text = "You can ask me your favorite color by saying, " \
                         "what's my favorite color?"
     else:
@@ -100,6 +90,7 @@ def set_color_in_session(intent, session):
         reprompt_text = "I'm not sure what your favorite color is. " \
                         "You can tell me your favorite color by saying, " \
                         "my favorite color is red."
+    card_title = intent['name']
     return build_response(session_attributes, build_speechlet_response(
         card_title, speech_output, reprompt_text, should_end_session))
 
@@ -110,8 +101,7 @@ def get_color_from_session(intent, session):
 
     if session.get('attributes', {}) and "favoriteColor" in session.get('attributes', {}):
         favorite_color = session['attributes']['favoriteColor']
-        speech_output = "Your favorite color is " + favorite_color + \
-                        ". Goodbye."
+        speech_output = f"Your favorite color is {favorite_color}. Goodbye."
         should_end_session = True
     else:
         speech_output = "I'm not sure what your favorite color is. " \
@@ -161,7 +151,7 @@ def on_intent(intent_request, session):
         return get_color_from_session(intent, session)
     elif intent_name == "AMAZON.HelpIntent":
         return get_welcome_response()
-    elif intent_name == "AMAZON.CancelIntent" or intent_name == "AMAZON.StopIntent":
+    elif intent_name in ["AMAZON.CancelIntent", "AMAZON.StopIntent"]:
         return handle_session_end_request()
     else:
         raise ValueError("Invalid intent")
